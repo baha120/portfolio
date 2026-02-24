@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, useProgress } from "@react-three/drei";
+import { Leva } from "leva";
 import ExperienceScene from "./experience-scene";
 import { experienceSections } from "./data/experience";
 import { Physics } from "@react-three/rapier";
@@ -148,13 +149,21 @@ export default function App() {
     [checkpoints, isAnimating],
   );
 
+  const [isDebug, setIsDebug] = useState(
+    () => window.location.hash === "#debug",
+  );
+  useEffect(() => {
+    const onHashChange = () =>
+      setIsDebug(window.location.hash === "#debug");
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
   const scaleX = Math.max(0, Math.min(1, loadingProgress / 100));
 
   useEffect(() => {
-    if (loadingProgress < 100) {
-      setLoadingBarEnded(false);
-      return;
-    }
+    if (loadingProgress < 100) return;
+
     const timeoutId = window.setTimeout(() => {
       setLoadingBarEnded(true);
     }, 500);
@@ -162,6 +171,8 @@ export default function App() {
     return () => window.clearTimeout(timeoutId);
   }, [loadingProgress]);
   return (
+    <>
+    <Leva hidden={!isDebug} />
     <div className="relative min-h-screen w-full bg-[#080910] text-white">
       <header
         className="pointer-events-none absolute left-0 right-0 top-0 z-30 flex items-center justify-between px-4 py-4 sm:px-6"
@@ -287,5 +298,6 @@ export default function App() {
         </div>
       </section>
     </div>
+    </>
   );
 }

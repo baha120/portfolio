@@ -29,7 +29,15 @@ export default function ExperienceScene({
   onProgress,
   targetProgress = 0,
 }: ExperienceSceneProps) {
-  const { debugCamera } = useControls("Debug", { debugCamera: false });
+  const [{ debugCamera }, set] = useControls("Debug", () => ({
+    debugCamera: window.location.hash === "#debug",
+  }));
+  useEffect(() => {
+    const onHashChange = () =>
+      set({ debugCamera: window.location.hash === "#debug" });
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, [set]);
 
   const { scene } = useThree();
   const progressRef = useRef(targetProgress);
