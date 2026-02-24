@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ComponentType } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
-import { Environment, useGLTF } from "@react-three/drei";
+import { Environment, OrbitControls, useGLTF } from "@react-three/drei";
+import { useControls } from "leva";
 import * as THREE from "three";
 import fragmentShader from "@/modules/shaders/particles/fragment.glsl";
 import vertexShader from "@/modules/shaders/particles/vertex.glsl";
@@ -10,10 +11,12 @@ import { PathCamera } from "@/modules/components/PathCamera";
 import gsap from "gsap";
 import WobbleSphere from "@/modules/components/WobbleSphere";
 import {
+  CuboidCollider,
   InstancedRigidBodies,
   RigidBody,
   type RapierRigidBody,
 } from "@react-three/rapier";
+import { preload } from "react-dom";
 
 type ExperienceSceneProps = {
   onProgress?: (progress: number, activeSectionId: string) => void;
@@ -22,11 +25,12 @@ type ExperienceSceneProps = {
   seed?: number;
   types?: Array<ComponentType<any>>;
 };
-
 export default function ExperienceScene({
   onProgress,
   targetProgress = 0,
 }: ExperienceSceneProps) {
+  const { debugCamera } = useControls("Debug", { debugCamera: false });
+
   const { scene } = useThree();
   const progressRef = useRef(targetProgress);
 
@@ -61,6 +65,8 @@ export default function ExperienceScene({
   const lastProgress = useRef(0);
   const lastSection = useRef(experienceSections[0]?.id ?? "");
   const [itemsDropped, setItemsDropped] = useState(false);
+  const [signpostReady, setSignpostReady] = useState(false);
+  const scratchColor = useRef(new THREE.Color());
 
   useFrame(() => {
     const clampedTarget = THREE.MathUtils.clamp(targetProgress, 0, 1);
@@ -93,10 +99,13 @@ export default function ExperienceScene({
 
     // Environment blending
     targetBackground.current.lerp(
-      new THREE.Color(activeSection.env.background),
+      scratchColor.current.set(activeSection.env.background),
       0.05,
     );
-    targetFog.current.lerp(new THREE.Color(activeSection.env.fogColor), 0.05);
+    targetFog.current.lerp(
+      scratchColor.current.set(activeSection.env.fogColor),
+      0.05,
+    );
 
     if (scene.background) {
       (scene.background as THREE.Color).copy(targetBackground.current);
@@ -117,7 +126,7 @@ export default function ExperienceScene({
         0.05,
       );
       dirLightRef.current.color.lerp(
-        new THREE.Color(activeSection.env.accent),
+        scratchColor.current.set(activeSection.env.accent),
         0.05,
       );
     }
@@ -131,6 +140,7 @@ export default function ExperienceScene({
       duration: 3,
       delay: 1,
       ease: "power2.out",
+      onComplete: () => setSignpostReady(true),
     });
   }, [uniforms]);
 
@@ -152,7 +162,7 @@ export default function ExperienceScene({
 
     scatterParticles();
   }, [scatterParticles]);
-  const book = useGLTF("./models/green_book.glb");
+  const book = useGLTF("./models/book.glb");
   const latteArt = useGLTF("./models/caffe_latte_cup.glb");
   const writingUtensils = useGLTF("./models/writing_utensils.glb");
   const yamaha = useGLTF("./models/yamaha_r1m.glb");
@@ -170,37 +180,63 @@ export default function ExperienceScene({
     );
   };
 
-  const booksCount = 5;
-  const booksRef = useRef<THREE.InstancedMesh>(null);
+  const booksCount = 17;
+  const coverRef = useRef<THREE.InstancedMesh>(null);
+  const pagesRef = useRef<THREE.InstancedMesh>(null);
 
   const bookColors = useMemo(
-    () => ["#e74c3c", "#2ecc71", "#3498db", "#f39c12", "#9b59b6"],
+    () => ["#e74c3c", "#784d14", "#bd1919", "#695d5d", "#8034eb"],
     [],
   );
-  console.log("booksRef.current>>>", booksRef.current);
 
   useEffect(() => {
-    if (!booksRef.current) return;
+    if (!coverRef.current) return;
     const color = new THREE.Color();
     for (let i = 0; i < booksCount; i++) {
       color.set(bookColors[i % bookColors.length]);
-      booksRef.current.setColorAt(i, color);
+      coverRef.current.setColorAt(i, color);
     }
-    booksRef.current.instanceColor!.needsUpdate = true;
+    coverRef.current.instanceColor!.needsUpdate = true;
   }, [itemsDropped, bookColors]);
 
-  const { bookGeometry, bookMaterial } = useMemo(() => {
-    let geo: THREE.BufferGeometry | undefined;
-    let mat: THREE.Material | undefined;
-    book.scene.traverse((child) => {
-      if (!geo && (child as THREE.Mesh).isMesh) {
-        const mesh = child as THREE.Mesh;
-        geo = mesh.geometry;
-        mat = mesh.material as THREE.Material;
+  useFrame(() => {
+    if (!coverRef.current || !pagesRef.current) return;
+    pagesRef.current.instanceMatrix.copy(coverRef.current.instanceMatrix);
+    pagesRef.current.instanceMatrix.needsUpdate = true;
+  });
+
+  const { coverGeometry, coverMaterial, pagesGeometry, pagesMaterial } =
+    useMemo(() => {
+      const meshes: THREE.Mesh[] = [];
+      book.scene.traverse((child) => {
+        if ((child as THREE.Mesh).isMesh) {
+          meshes.push(child as THREE.Mesh);
+        }
+      });
+      // meshes[0] = cover, meshes[1] = pages (based on your console.log)
+      const cover = (
+        meshes[0]?.material as THREE.MeshStandardMaterial
+      )?.clone();
+      if (cover) {
+        cover.roughness = 1;
+        cover.metalness = 0;
+        cover.emissiveIntensity = 0;
       }
-    });
-    return { bookGeometry: geo, bookMaterial: mat };
-  }, [book.scene]);
+      const pages = (
+        meshes[1]?.material as THREE.MeshStandardMaterial
+      )?.clone();
+      if (pages) {
+        pages.roughness = 1;
+        pages.metalness = 0;
+        pages.emissiveIntensity = 0;
+      }
+      return {
+        coverGeometry: meshes[0]?.geometry,
+        coverMaterial: cover,
+        pagesGeometry: meshes[1]?.geometry,
+        pagesMaterial: pages,
+      };
+    }, [book.scene]);
 
   const instances = useMemo(() => {
     const items = [];
@@ -209,27 +245,46 @@ export default function ExperienceScene({
     const pz = -10;
     const spread = 4; // stay within platform bounds
 
-    for (let i = 0; i < booksCount; i++) {
-      items.push({
-        key: "instance_" + i,
-        position: [
-          px + (Math.random() - 0.5) * spread,
-          6 + i * 0.4,
-          pz + (Math.random() - 0.5) * spread,
-        ] as [number, number, number],
-        rotation: [Math.random(), Math.random(), Math.random()] as [
-          number,
-          number,
-          number,
-        ],
-      });
-    }
+    // for (let i = 0; i < booksCount; i++) {
+    //   items.push({
+    //     key: "instance_" + i,
+    //     position: [
+    //       px + (Math.random() - 0.5) * spread,
+    //       6 + i * 0.4,
+    //       pz + (Math.random() - 0.5) * spread,
+    //     ] as [number, number, number],
+    //     rotation: [Math.random(), Math.random(), Math.random()] as [
+    //       number,
+    //       number,
+    //       number,
+    //     ],
+    //     scale: 0.21 as number,
+    //   });
+    // }
 
-    return items;
-  }, []);
+    return Array.from({ length: booksCount }, (_, i) => ({
+      key: "instance_" + i,
+      position: [
+        px + (Math.random() - 0.5) * spread,
+        6 + i * 0.4,
+        pz + (Math.random() - 0.5) * spread,
+      ] as [number, number, number],
+      rotation: [Math.random(), Math.random(), Math.random()] as [
+        number,
+        number,
+        number,
+      ],
+      scale: 0.21,
+    }));
+  }, [itemsDropped]);
+
   return (
     <>
-      <PathCamera curve={curve} progressRef={progressRef} />
+      {debugCamera ? (
+        <OrbitControls makeDefault />
+      ) : (
+        <PathCamera curve={curve} progressRef={progressRef} />
+      )}
       <Environment preset="city" />
       <ambientLight intensity={3} />
       <directionalLight
@@ -258,6 +313,28 @@ export default function ExperienceScene({
           accent={section.env.accent}
         />
       ))}
+      <RigidBody type="fixed">
+        <CuboidCollider
+          args={[3, 1, 0.25]}
+          rotation={[0, 5.14, 0]}
+          position={[-2.2, 1.5, -8.5]}
+        />
+        <CuboidCollider
+          args={[3, 1, 0.25]}
+          rotation={[0, 0.42, 0]}
+          position={[-0.6, 1.5, -12.9]}
+        />
+        <CuboidCollider
+          args={[3, 1, 0.25]}
+          rotation={[0, 5.14, 0]}
+          position={[3.65, 1.5, -11.5]}
+        />
+        <CuboidCollider
+          args={[3, 1, 0.25]}
+          rotation={[0, 0.42, 0]}
+          position={[1.9, 1.5, -7]}
+        />
+      </RigidBody>
       <RigidBody type="fixed" friction={1}>
         <mesh
           receiveShadow
@@ -285,28 +362,32 @@ export default function ExperienceScene({
 
       {itemsDropped && (
         <>
-          <InstancedRigidBodies linearDamping={2} instances={instances}>
+          <InstancedRigidBodies
+            linearDamping={2}
+            type={itemsDropped ? "dynamic" : "fixed"}
+            instances={instances}
+          >
             <instancedMesh
-              ref={booksRef}
+              ref={coverRef}
               frustumCulled={false}
               castShadow
               receiveShadow
-              args={[bookGeometry, bookMaterial, booksCount]}
+              args={[coverGeometry, coverMaterial, booksCount]}
+            />
+            <instancedMesh
+              ref={pagesRef}
+              frustumCulled={false}
+              args={[pagesGeometry, pagesMaterial, booksCount]}
             />
           </InstancedRigidBodies>
-          <RigidBody restitution={0} friction={1} lockRotations>
-            <mesh position={[0.7, 3.5, -10.5]} scale={8}>
-              <primitive object={signpost.scene} scale={0.1} />
-            </mesh>
-          </RigidBody>
           <RigidBody linearDamping={1.5}>
             <mesh position={[-1, 12, -9]} scale={8}>
-              <primitive object={writingUtensils.scene} scale={1} />
+              <primitive object={writingUtensils.scene} scale={0.5} />
             </mesh>
           </RigidBody>
           <RigidBody linearDamping={1.5}>
             <mesh position={[3, 16, -11]} scale={0.5}>
-              <primitive object={latteArt.scene} scale={0.25} />
+              <primitive object={latteArt.scene} scale={0.18} />
             </mesh>
           </RigidBody>
           <RigidBody
@@ -326,6 +407,27 @@ export default function ExperienceScene({
           </RigidBody>
         </>
       )}
+
+      {signpostReady && (
+        <RigidBody
+          restitution={0}
+          friction={1}
+          lockRotations
+          gravityScale={2}
+          linearDamping={0}
+        >
+          <mesh position={[0.7, 20, -10.5]} scale={8}>
+            <primitive object={signpost.scene} scale={0.1} />
+          </mesh>
+        </RigidBody>
+      )}
     </>
   );
 }
+
+useGLTF.preload("./models/book.glb");
+useGLTF.preload("./models/caffe_latte_cup.glb");
+useGLTF.preload("./models/signpost.glb");
+useGLTF.preload("./models/yamaha_r1m.glb");
+useGLTF.preload("./models/writing_utensils.glb");
+useGLTF.preload("./models/low-poly_wooden_sign_made_of_three_planks.glb");

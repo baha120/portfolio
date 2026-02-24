@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas } from "@react-three/fiber";
-import { useProgress } from "@react-three/drei";
+import { OrbitControls, useProgress } from "@react-three/drei";
 import ExperienceScene from "./experience-scene";
 import { experienceSections } from "./data/experience";
 import { Physics } from "@react-three/rapier";
@@ -181,6 +181,7 @@ export default function App() {
         >
           <LoadingProgressBridge onProgress={setLoadingProgress} />
           <OverlayScreen progress={loadingProgress} />
+          <OrbitControls></OrbitControls>
           <Physics debug={false} gravity={[0, -9.08, 0]}>
             <ExperienceScene
               onProgress={handleProgress}
@@ -196,16 +197,7 @@ export default function App() {
             loadingBarEnded ? undefined : { transform: `scaleX(${scaleX})` }
           }
         />
-        <div className="absolute right-4 top-1/2 z-30 flex -translate-y-1/2 flex-col gap-3">
-          <button
-            type="button"
-            disabled={isAnimating}
-            onClick={() => stepProgress("forward")}
-            className={`flex h-12 w-12 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white transition hover:bg-white/20 ${isAnimating ? "opacity-30 cursor-not-allowed" : ""}`}
-            aria-label="Move forward"
-          >
-            ↑
-          </button>
+        <div className="absolute bottom-6 left-1/2 z-30 flex -translate-x-1/2 flex-row gap-3">
           <button
             type="button"
             disabled={isAnimating}
@@ -214,6 +206,15 @@ export default function App() {
             aria-label="Move backward"
           >
             ↓
+          </button>
+          <button
+            type="button"
+            disabled={isAnimating}
+            onClick={() => stepProgress("forward")}
+            className={`flex h-12 w-12 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white transition hover:bg-white/20 ${isAnimating ? "opacity-30 cursor-not-allowed" : ""}`}
+            aria-label="Move forward"
+          >
+            ↑
           </button>
         </div>
         <div
