@@ -31,6 +31,9 @@ export default function App() {
   const [activeSectionId, setActiveSectionId] = useState(
     experienceSections[0]?.id ?? "",
   );
+  const [showNavigationHint, setShowNavigationHint] = useState(false);
+  const [hintVisible, setHintVisible] = useState(false);
+  const hintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const activeSection = useMemo(
     () => experienceSections.find((section) => section.id === activeSectionId),
@@ -50,12 +53,12 @@ export default function App() {
             tags: ["Next.js", "React", "GraphQL"],
             href: "https://rappid-on-shopify.vercel.app/",
           },
-          {
-            title: "Restaurant (Coming Soon)",
-            description: "",
-            tags: ["GLSL", "Shaders", "ThreeJS"],
-            href: "https://piazzablu.com",
-          },
+          // {
+          //   title: "Restaurant (Coming Soon)",
+          //   description: "",
+          //   tags: ["GLSL", "Shaders", "ThreeJS"],
+          //   href: "https://piazzablu.com",
+          // },
           {
             title: "AI Prompt Analyzer",
             description:
@@ -63,12 +66,12 @@ export default function App() {
             tags: ["AI", "React", "NextJS"],
             href: "https://green-ai-prototype-wnd3.vercel.app/",
           },
-          {
-            title: "Company Dashboard",
-            description: "The company information of piazza blu",
-            tags: ["NextJS", "REST API", "rechart", "tanstack"],
-            href: "http://localhost:3001",
-          },
+          // {
+          //   title: "Company Dashboard",
+          //   description: "The company information of piazza blu",
+          //   tags: ["NextJS", "REST API", "rechart", "tanstack"],
+          //   href: "http://localhost:3001",
+          // },
         ],
       },
       accounts: {
@@ -111,6 +114,18 @@ export default function App() {
     setActiveSectionId(sectionId);
   }, []);
 
+  const dismissHint = useCallback(() => {
+    if (hintTimerRef.current) clearTimeout(hintTimerRef.current);
+    setHintVisible(false);
+    setTimeout(() => setShowNavigationHint(false), 500);
+  }, []);
+
+  const handleRailFormed = useCallback(() => {
+    setShowNavigationHint(true);
+    setTimeout(() => setHintVisible(true), 50);
+    hintTimerRef.current = setTimeout(dismissHint, 5000);
+  }, [dismissHint]);
+
   const checkpoints = useMemo(
     () => [0, ...experienceSections.map((s) => (s.tStart + s.tEnd) / 2)],
     [],
@@ -122,6 +137,7 @@ export default function App() {
   const stepProgress = useCallback(
     (direction: "forward" | "backward") => {
       if (isAnimating) return;
+      dismissHint();
 
       const nextIndex =
         direction === "forward"
@@ -146,15 +162,14 @@ export default function App() {
         onComplete: () => setIsAnimating(false),
       });
     },
-    [checkpoints, isAnimating],
+    [checkpoints, isAnimating, dismissHint],
   );
 
   const [isDebug, setIsDebug] = useState(
     () => window.location.hash === "#debug",
   );
   useEffect(() => {
-    const onHashChange = () =>
-      setIsDebug(window.location.hash === "#debug");
+    const onHashChange = () => setIsDebug(window.location.hash === "#debug");
     window.addEventListener("hashchange", onHashChange);
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
@@ -172,132 +187,163 @@ export default function App() {
   }, [loadingProgress]);
   return (
     <>
-    <Leva hidden={!isDebug} />
-    <div className="relative min-h-screen w-full bg-[#080910] text-white">
-      <header
-        className="pointer-events-none absolute left-0 right-0 top-0 z-30 flex items-center justify-between px-4 py-4 sm:px-6"
-        style={{ paddingTop: "calc(1rem + env(safe-area-inset-top, 0px))" }}
-      >
-        <div className="pointer-events-auto rounded-full border border-white/10 bg-white/5 px-4 py-2 text-[10px] uppercase tracking-[0.25em] text-white/70 sm:text-xs">
-          Bahas · Journey Rail
-        </div>
-      </header>
+      <Leva hidden={!isDebug} />
+      <div className="relative min-h-screen w-full bg-[#080910] text-white">
+        <header
+          className="pointer-events-none absolute left-0 right-0 top-0 z-30 flex items-center justify-between px-4 py-4 sm:px-6"
+          style={{ paddingTop: "calc(1rem + env(safe-area-inset-top, 0px))" }}
+        >
+          <div className="pointer-events-auto rounded-full border border-white/10 bg-white/5 px-4 py-2 text-[10px] uppercase tracking-[0.25em] text-white/70 sm:text-xs">
+            Baha's Journey Rail
+          </div>
+        </header>
 
-      <section className="relative h-screen w-full overflow-hidden">
-        <Canvas
-          shadows
-          gl={{ antialias: true }}
-          camera={{ fov: 45 }}
-          dpr={[1, 1.6]}
-        >
-          <LoadingProgressBridge onProgress={setLoadingProgress} />
-          <OverlayScreen progress={loadingProgress} />
-          <OrbitControls></OrbitControls>
-          <Physics debug={false} gravity={[0, -9.08, 0]}>
-            <ExperienceScene
-              onProgress={handleProgress}
-              targetProgress={targetProgress}
-            />
-          </Physics>
-        </Canvas>
-        <div
-          className={`loading-bar pointer-events-none ${
-            loadingBarEnded ? "ended" : ""
-          }`}
-          style={
-            loadingBarEnded ? undefined : { transform: `scaleX(${scaleX})` }
-          }
-        />
-        <div className="absolute bottom-6 left-1/2 z-30 flex -translate-x-1/2 flex-row gap-3">
-          <button
-            type="button"
-            disabled={isAnimating}
-            onClick={() => stepProgress("backward")}
-            className={`flex h-12 w-12 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white transition hover:bg-white/20 ${isAnimating ? "opacity-30 cursor-not-allowed" : ""}`}
-            aria-label="Move backward"
+        <section className="relative h-screen w-full overflow-hidden">
+          <Canvas
+            shadows
+            gl={{ antialias: true }}
+            camera={{ fov: 45 }}
+            dpr={[1, 1.6]}
           >
-            ↓
-          </button>
-          <button
-            type="button"
-            disabled={isAnimating}
-            onClick={() => stepProgress("forward")}
-            className={`flex h-12 w-12 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white transition hover:bg-white/20 ${isAnimating ? "opacity-30 cursor-not-allowed" : ""}`}
-            aria-label="Move forward"
-          >
-            ↑
-          </button>
-        </div>
-        <div
-          className={`pointer-events-none absolute inset-0 z-20 flex items-center justify-center px-4 py-6 transition-opacity duration-500 sm:px-6 ${
-            overlayActive ? "opacity-100" : "opacity-0"
-          }`}
-        >
-          <div className="absolute inset-0 bg-black/75 backdrop-blur-sm" />
-          {overlay && (
-            <div className="pointer-events-none relative w-full max-w-2xl rounded-[28px] p-6">
-              <div className="ml-16 flex items-center justify-between gap-4 text-xs uppercase tracking-[0.3em] text-white/50">
-                <span>{overlay.title}</span>
+            <LoadingProgressBridge onProgress={setLoadingProgress} />
+            <OverlayScreen progress={loadingProgress} />
+            <OrbitControls></OrbitControls>
+            <Physics debug={false} gravity={[0, -9.08, 0]}>
+              <ExperienceScene
+                onProgress={handleProgress}
+                onRailFormed={handleRailFormed}
+                targetProgress={targetProgress}
+              />
+            </Physics>
+          </Canvas>
+          <div
+            className={`loading-bar pointer-events-none ${
+              loadingBarEnded ? "ended" : ""
+            }`}
+            style={
+              loadingBarEnded ? undefined : { transform: `scaleX(${scaleX})` }
+            }
+          />
+          {showNavigationHint && (
+            <div
+              className={`pointer-events-none absolute bottom-24 left-1/2 z-30 flex -translate-x-1/2 flex-col items-center transition-all duration-500 ease-out ${
+                hintVisible
+                  ? "opacity-100 translate-y-0"
+                  : "opacity-0 translate-y-3"
+              }`}
+            >
+              <div className="relative flex items-center justify-center rounded-full border border-white/20 bg-white/10 px-12 py-3 backdrop-blur-md">
+                <div className="animate-pulse absolute inset-0 rounded-full border border-white/10" />
+                <span className="absolute left-4 animate-bounce text-base text-white/80">
+                  ↓
+                </span>
+                <span className="text-[10px] uppercase tracking-[0.3em] text-white/60">
+                  Use arrows to navigate
+                </span>
+                <span
+                  className="absolute right-4 animate-bounce text-base text-white/80"
+                  style={{ animationDelay: "0.3s" }}
+                >
+                  ↑
+                </span>
               </div>
-              <div className="mt-4 flex w-full flex-col items-center pointer-events-auto">
-                {overlay.type === "projects" && (
-                  <ul className="mx-auto grid w-full max-w-md gap-3 text-center">
-                    {overlay.items.map((item, index) => (
-                      <li
-                        key={item.title}
-                        className={`rounded-2xl p-3 transition-all duration-500 ease-out ${
-                          overlayActive
-                            ? "opacity-70 translate-x-0"
-                            : "opacity-0 translate-x-36"
-                        }`}
-                        style={{ transitionDelay: `${index * 200}ms` }}
-                      >
-                        <div className="flex flex-col items-center gap-1 text-center">
-                          <a
-                            href={item.href}
-                            target="_blank"
-                            className="text-sm font-semibold text-white"
-                          >
-                            {item.title}
-                          </a>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-              <div className="mt-4 flex w-full flex-col items-center pointer-events-auto">
-                {overlay.type === "accounts" && (
-                  <ul className="mx-auto grid w-full max-w-md gap-3 text-center">
-                    {overlay.items.map((item, index) => (
-                      <li
-                        key={item.label}
-                        className={`rounded-2xl p-3 transition-all duration-500 ease-out ${
-                          overlayActive
-                            ? "opacity-70 translate-x-0"
-                            : "opacity-0 translate-x-36"
-                        }`}
-                        style={{ transitionDelay: `${index * 200}ms` }}
-                      >
-                        <div className="flex flex-col items-center gap-1 text-center">
-                          <a
-                            href={item.href}
-                            target="_blank"
-                            className="text-sm font-semibold text-white"
-                          >
-                            {item.label}
-                          </a>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
+              <div
+                className={`mt-2 h-px w-8 bg-white/20 transition-all duration-700 ${
+                  hintVisible ? "w-8 opacity-100" : "w-0 opacity-0"
+                }`}
+              />
             </div>
           )}
-        </div>
-      </section>
-    </div>
+          <div className="absolute bottom-6 left-1/2 z-30 flex -translate-x-1/2 flex-row gap-3">
+            <button
+              type="button"
+              disabled={isAnimating}
+              onClick={() => stepProgress("backward")}
+              className={`flex h-12 w-12 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white transition hover:bg-white/20 ${isAnimating ? "opacity-30 cursor-not-allowed" : ""}`}
+              aria-label="Move backward"
+            >
+              ↓
+            </button>
+            <button
+              type="button"
+              disabled={isAnimating}
+              onClick={() => stepProgress("forward")}
+              className={`flex h-12 w-12 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white transition hover:bg-white/20 ${isAnimating ? "opacity-30 cursor-not-allowed" : ""}`}
+              aria-label="Move forward"
+            >
+              ↑
+            </button>
+          </div>
+          <div
+            className={`pointer-events-none absolute inset-0 z-20 flex items-center justify-center px-4 py-6 transition-opacity duration-500 sm:px-6 ${
+              overlayActive ? "opacity-100" : "opacity-0"
+            }`}
+          >
+            <div className="absolute inset-0 bg-black/75 backdrop-blur-sm" />
+            {overlay && (
+              <div className="pointer-events-none relative w-full max-w-2xl rounded-[28px] p-6">
+                <div className="ml-16 flex items-center justify-between gap-4 text-xs uppercase tracking-[0.3em] text-white/50">
+                  <span>{overlay.title}</span>
+                </div>
+                <div className="mt-4 flex w-full flex-col items-center pointer-events-auto">
+                  {overlay.type === "projects" && (
+                    <ul className="mx-auto grid w-full max-w-md gap-3 text-center">
+                      {overlay.items.map((item, index) => (
+                        <li
+                          key={item.title}
+                          className={`rounded-2xl p-3 transition-all duration-500 ease-out ${
+                            overlayActive
+                              ? "opacity-70 translate-x-0"
+                              : "opacity-0 translate-x-36"
+                          }`}
+                          style={{ transitionDelay: `${index * 200}ms` }}
+                        >
+                          <div className="flex flex-col items-center gap-1 text-center">
+                            <a
+                              href={item.href}
+                              target="_blank"
+                              className="text-sm font-semibold text-white"
+                            >
+                              {item.title}
+                            </a>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                <div className="mt-4 flex w-full flex-col items-center pointer-events-auto">
+                  {overlay.type === "accounts" && (
+                    <ul className="mx-auto grid w-full max-w-md gap-3 text-center">
+                      {overlay.items.map((item, index) => (
+                        <li
+                          key={item.label}
+                          className={`rounded-2xl p-3 transition-all duration-500 ease-out ${
+                            overlayActive
+                              ? "opacity-70 translate-x-0"
+                              : "opacity-0 translate-x-36"
+                          }`}
+                          style={{ transitionDelay: `${index * 200}ms` }}
+                        >
+                          <div className="flex flex-col items-center gap-1 text-center">
+                            <a
+                              href={item.href}
+                              target="_blank"
+                              className="text-sm font-semibold text-white"
+                            >
+                              {item.label}
+                            </a>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
     </>
   );
 }

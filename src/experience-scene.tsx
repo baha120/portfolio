@@ -16,10 +16,10 @@ import {
   RigidBody,
   type RapierRigidBody,
 } from "@react-three/rapier";
-import { preload } from "react-dom";
 
 type ExperienceSceneProps = {
   onProgress?: (progress: number, activeSectionId: string) => void;
+  onRailFormed?: () => void;
   targetProgress?: number;
   count?: number;
   seed?: number;
@@ -27,8 +27,13 @@ type ExperienceSceneProps = {
 };
 export default function ExperienceScene({
   onProgress,
+  onRailFormed,
   targetProgress = 0,
 }: ExperienceSceneProps) {
+  const onRailFormedRef = useRef(onRailFormed);
+  useEffect(() => {
+    onRailFormedRef.current = onRailFormed;
+  }, [onRailFormed]);
   const [{ debugCamera }, set] = useControls("Debug", () => ({
     debugCamera: window.location.hash === "#debug",
   }));
@@ -148,7 +153,10 @@ export default function ExperienceScene({
       duration: 3,
       delay: 1,
       ease: "power2.out",
-      onComplete: () => setSignpostReady(true),
+      onComplete: () => {
+        setSignpostReady(true);
+        onRailFormedRef.current?.();
+      },
     });
   }, [uniforms]);
 
@@ -191,7 +199,9 @@ export default function ExperienceScene({
   const booksCount = 17;
   const coverRef = useRef<THREE.InstancedMesh>(null);
   const pagesRef = useRef<THREE.InstancedMesh>(null);
+  const coffeeRef = useRef<THREE.InstancedMesh>(null);
 
+  const coffeeCount = 4;
   const bookColors = useMemo(
     () => ["#e74c3c", "#784d14", "#bd1919", "#695d5d", "#8034eb"],
     [],
@@ -245,32 +255,49 @@ export default function ExperienceScene({
         pagesMaterial: pages,
       };
     }, [book.scene]);
+  const { coffeeGeometry, coffeeMaterial } = useMemo(() => {
+    const meshes: THREE.Mesh[] = [];
+    latteArt.scene.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        meshes.push(child as THREE.Mesh);
+      }
+    });
+
+    return {
+      coffeeGeometry: meshes[0]?.geometry,
+      coffeeMaterial: (
+        meshes[0]?.material as THREE.MeshStandardMaterial
+      )?.clone(),
+    };
+  }, [book.scene]);
 
   const instances = useMemo(() => {
-    const items = [];
-    // Platform is at x=1, z=-10, size 10x10
     const px = 1;
     const pz = -10;
-    const spread = 4; // stay within platform bounds
-
-    // for (let i = 0; i < booksCount; i++) {
-    //   items.push({
-    //     key: "instance_" + i,
-    //     position: [
-    //       px + (Math.random() - 0.5) * spread,
-    //       6 + i * 0.4,
-    //       pz + (Math.random() - 0.5) * spread,
-    //     ] as [number, number, number],
-    //     rotation: [Math.random(), Math.random(), Math.random()] as [
-    //       number,
-    //       number,
-    //       number,
-    //     ],
-    //     scale: 0.21 as number,
-    //   });
-    // }
+    const spread = 4;
 
     return Array.from({ length: booksCount }, (_, i) => ({
+      key: "instance_" + i,
+      position: [
+        px + (Math.random() - 0.5) * spread,
+        6 + i * 0.4,
+        pz + (Math.random() - 0.5) * spread,
+      ] as [number, number, number],
+      rotation: [Math.random(), Math.random(), Math.random()] as [
+        number,
+        number,
+        number,
+      ],
+      scale: 0.21,
+    }));
+  }, [itemsDropped]);
+
+  const coffeeInstances = useMemo(() => {
+    const px = 1;
+    const pz = -10;
+    const spread = 4;
+
+    return Array.from({ length: coffeeCount }, (_, i) => ({
       key: "instance_" + i,
       position: [
         px + (Math.random() - 0.5) * spread,
@@ -388,14 +415,27 @@ export default function ExperienceScene({
               args={[pagesGeometry, pagesMaterial, booksCount]}
             />
           </InstancedRigidBodies>
+          <InstancedRigidBodies
+            linearDamping={2}
+            type={itemsDropped ? "dynamic" : "fixed"}
+            instances={coffeeInstances}
+          >
+            <instancedMesh
+              ref={coffeeRef}
+              frustumCulled={false}
+              castShadow
+              receiveShadow
+              args={[coffeeGeometry, coffeeMaterial, coffeeCount]}
+            >
+              {" "}
+              <mesh position={[3, 16, -11]} scale={0.5}>
+                <primitive object={latteArt.scene} scale={0.18} />
+              </mesh>
+            </instancedMesh>
+          </InstancedRigidBodies>
           <RigidBody linearDamping={1.5}>
             <mesh position={[-1, 12, -9]} scale={8}>
               <primitive object={writingUtensils.scene} scale={0.5} />
-            </mesh>
-          </RigidBody>
-          <RigidBody linearDamping={1.5}>
-            <mesh position={[3, 16, -11]} scale={0.5}>
-              <primitive object={latteArt.scene} scale={0.18} />
             </mesh>
           </RigidBody>
           <RigidBody
